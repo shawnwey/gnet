@@ -278,7 +278,8 @@ def main():
         train_loss = train_num = 0
         train_pred_list = []
         train_labels_list = []
-        for train_batch in tqdm(train_loader, desc='Epoch {:03d}'.format(epoch), leave=False,
+        print("======== training: {} th epoch".format(epoch))
+        for train_batch in tqdm(train_loader, desc='Epoch {:05d}'.format(epoch),
                                 total=len(train_loader) // train_loader.batch_size):
             net.train()
             batch_data, batch_labels = train_batch
