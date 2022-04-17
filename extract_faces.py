@@ -33,15 +33,16 @@ from isplutils.utils import adapt_bb
 
 def parse_args(argv):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--source', type=Path, help='Videos root directory', required=True)
-    parser.add_argument('--videodf', type=Path, help='Path to read the videos DataFrame', required=True)
-    parser.add_argument('--facesfolder', type=Path, help='Faces output root directory', required=True)
-    parser.add_argument('--facesdf', type=Path, help='Path to save the output DataFrame of faces', required=True)
-    parser.add_argument('--checkpoint', type=Path, help='Path to save the temporary per-video outputs', required=True)
+    parser.add_argument('--source', type=Path, help='Videos root directory', default=r'F:\ggy\dataset\FF')
+    parser.add_argument('--videodf', type=Path, help='Path to read the videos DataFrame', default=r'F:\ggy\dataset\FF/preprocess/ffpp_videos.pkl')
+    parser.add_argument('--facesfolder', type=Path, help='Faces output root directory', default=r'F:\ggy\dataset\FF/preprocess/faces')
+    parser.add_argument('--facesdf', type=Path, help='Path to save the output DataFrame of faces', default=r'F:\ggy\dataset\FF/preprocess/facesDataFrames')
+    parser.add_argument('--checkpoint', type=Path, help='Path to save the temporary per-video outputs', default=r'F:\ggy\dataset\FF/preprocess/checkpoint')
 
     parser.add_argument('--fpv', type=int, default=32, help='Frames per video')
     parser.add_argument('--device', type=torch.device,
-                        default=torch.device('cuda:0' if torch.cuda.is_available() else 'cpu'),
+                        default=torch.device('cuda:0'),
+                        # default=torch.device('cuda:0' if torch.cuda.is_available() else 'cpu'),
                         help='Device to use for face extraction')
     parser.add_argument('--collateonly', help='Only perform collation of pre-existing results', action='store_true')
     parser.add_argument('--noindex', help='Do not rebuild the index', action='store_false')
