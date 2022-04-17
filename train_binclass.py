@@ -40,33 +40,32 @@ from isplutils.data import FrameFaceIterableDataset, load_face
 def main():
     # Args
     parser = argparse.ArgumentParser()
-    parser.add_argument('--net', type=str, help='Net model class', required=True)
-    parser.add_argument('--traindb', type=str, help='Training datasets', nargs='+', choices=split.available_datasets,
-                        required=True)
-    parser.add_argument('--valdb', type=str, help='Validation datasets', nargs='+', choices=split.available_datasets,
-                        required=True)
-    parser.add_argument('--dfdc_faces_df_path', type=str, action='store',
-                        help='Path to the Pandas Dataframe obtained from extract_faces.py on the DFDC dataset. '
-                             'Required for training/validating on the DFDC dataset.')
-    parser.add_argument('--dfdc_faces_dir', type=str, action='store',
-                        help='Path to the directory containing the faces extracted from the DFDC dataset. '
-                             'Required for training/validating on the DFDC dataset.')
+    parser.add_argument('--env', type=int, default=0)
+    parser.add_argument('--device', type=int, help='GPU device id', default=0)
+    parser.add_argument('--net', type=str, help='Net model class', default='EfficientNetAutoAttB4')
+    parser.add_argument('--traindb', type=list, help='Training datasets', nargs='+', choices=split.available_datasets,
+                        default=['ff-c40-720-140-140'])
+    parser.add_argument('--valdb', type=list, help='Validation datasets', nargs='+', choices=split.available_datasets,
+                        default=['ff-c40-720-140-140'])
     parser.add_argument('--ffpp_faces_df_path', type=str, action='store',
                         help='Path to the Pandas Dataframe obtained from extract_faces.py on the FF++ dataset. '
-                             'Required for training/validating on the FF++ dataset.')
+                             'Required for training/validating on the FF++ dataset.',
+                        default='FF/preprocess/facesDataFrames')
     parser.add_argument('--ffpp_faces_dir', type=str, action='store',
                         help='Path to the directory containing the faces extracted from the FF++ dataset. '
-                             'Required for training/validating on the FF++ dataset.')
-    parser.add_argument('--face', type=str, help='Face crop or scale', required=True,
-                        choices=['scale', 'tight'])
-    parser.add_argument('--size', type=int, help='Train patch size', required=True)
+                             'Required for training/validating on the FF++ dataset.',
+                        default='FF/preprocess/faces')
+    parser.add_argument('--face', type=str, help='Face crop or scale',
+                        choices=['scale', 'tight'],
+                        default='scale')
+    parser.add_argument('--size', type=int, help='Train patch size', default=224)
 
     parser.add_argument('--batch', type=int, help='Batch size to fit in GPU memory', default=32)
     parser.add_argument('--lr', type=float, default=1e-5, help='Learning rate')
     parser.add_argument('--valint', type=int, help='Validation interval (iterations)', default=500)
     parser.add_argument('--patience', type=int, help='Patience before dropping the LR [validation intervals]',
                         default=10)
-    parser.add_argument('--maxiter', type=int, help='Maximum number of iterations', default=20000)
+    parser.add_argument('--maxiter', type=int, help='Maximum number of iterations', default=30000)
     parser.add_argument('--init', type=str, help='Weight initialization file')
     parser.add_argument('--scratch', action='store_true', help='Train from scratch')
 
@@ -75,9 +74,8 @@ def main():
                         default=6000)
 
     parser.add_argument('--logint', type=int, help='Training log interval (iterations)', default=100)
-    parser.add_argument('--workers', type=int, help='Num workers for data loaders', default=6)
-    parser.add_argument('--device', type=int, help='GPU device id', default=0)
-    parser.add_argument('--seed', type=int, help='Random seed', default=0)
+    parser.add_argument('--workers', type=int, help='Num workers for data loaders', default=8)
+    parser.add_argument('--seed', type=int, help='Random seed', default=41)
 
     parser.add_argument('--debug', action='store_true', help='Activate debug')
     parser.add_argument('--suffix', type=str, help='Suffix to default tag')
@@ -88,17 +86,26 @@ def main():
                         default='runs/binclass/')
     parser.add_argument('--models_dir', type=str, help='Directory for saving the models weights',
                         default='weights/binclass/')
+    # --------------------------------------------------------------------
+    parser.add_argument('--dfdc_faces_df_path', type=str, action='store',
+                        help='Path to the Pandas Dataframe obtained from extract_faces.py on the DFDC dataset. '
+                             'Required for training/validating on the DFDC dataset.')
+    parser.add_argument('--dfdc_faces_dir', type=str, action='store',
+                        help='Path to the directory containing the faces extracted from the DFDC dataset. '
+                             'Required for training/validating on the DFDC dataset.')
 
     args = parser.parse_args()
 
     # Parse arguments
+    ds_root = ['F:/ggy/dataset', '/home/disk/weixing/datasets']
+    ffpp_df_path = os.path.join(ds_root[args.env], args.ffpp_faces_df_path)
+    ffpp_faces_dir = os.path.join(ds_root[args.env], args.ffpp_faces_dir)
+    dfdc_df_path = args.dfdc_faces_df_path
+    dfdc_faces_dir = args.dfdc_faces_dir
+
     net_class = getattr(fornet, args.net)
     train_datasets = args.traindb
     val_datasets = args.valdb
-    dfdc_df_path = args.dfdc_faces_df_path
-    ffpp_df_path = args.ffpp_faces_df_path
-    dfdc_faces_dir = args.dfdc_faces_dir
-    ffpp_faces_dir = args.ffpp_faces_dir
     face_policy = args.face
     face_size = args.size
 
@@ -122,6 +129,7 @@ def main():
     suffix = args.suffix
 
     enable_attention = args.attention
+    print("=====> enable_attention: {}".format(enable_attention))
 
     weights_folder = args.models_dir
     logs_folder = args.log_dir
@@ -321,7 +329,7 @@ def main():
                 tb.add_pr_curve('train/pr', train_labels, train_pred, iteration)
 
                 # Validation
-                val_loss = validation_routine(net, device, val_loader, criterion, tb, iteration, 'val')
+                val_loss = validation(net, device, val_loader, criterion, tb, iteration, 'val')
                 tb.flush()
 
                 # LR Scheduler
@@ -408,7 +416,7 @@ def batch_forward(net: nn.Module, device: torch.device, criterion, data: torch.T
     return loss, pred
 
 
-def validation_routine(net, device, val_loader, criterion, tb, iteration, tag: str, loader_len_norm: int = None):
+def validation(net, device, val_loader, criterion, tb, iteration, tag: str, loader_len_norm: int = None):
     net.eval()
     loader_len_norm = loader_len_norm if loader_len_norm is not None else val_loader.batch_size
     val_num = 0
