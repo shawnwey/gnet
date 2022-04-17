@@ -279,8 +279,7 @@ def main():
         train_pred_list = []
         train_labels_list = []
         print("======== training: {} th epoch".format(epoch))
-        for train_batch in tqdm(train_loader, desc='Epoch {:05d}'.format(epoch),
-                                total=len(train_loader) // train_loader.batch_size):
+        for train_batch in tqdm(train_loader, desc='Epoch {:05d}'.format(epoch)):
             net.train()
             batch_data, batch_labels = train_batch
 
@@ -424,7 +423,7 @@ def validation(net, device, val_loader, criterion, tb, iteration, tag: str, load
     val_loss = 0.
     pred_list = list()
     labels_list = list()
-    for val_data in tqdm(val_loader, desc='Validation', total=len(val_loader) // loader_len_norm):
+    for val_data in tqdm(val_loader, desc='Validation'):
         batch_data, batch_labels = val_data
 
         val_batch_num = len(batch_labels)
