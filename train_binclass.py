@@ -60,12 +60,12 @@ def main():
                         default='scale')
     parser.add_argument('--size', type=int, help='Train patch size', default=224)
 
-    parser.add_argument('--batch', type=int, help='Batch size to fit in GPU memory', default=32)
+    parser.add_argument('--batch', type=int, help='Batch size to fit in GPU memory', default=24)
     parser.add_argument('--lr', type=float, default=1e-5, help='Learning rate')
     parser.add_argument('--valint', type=int, help='Validation interval (iterations)', default=500)
     parser.add_argument('--patience', type=int, help='Patience before dropping the LR [validation intervals]',
                         default=10)
-    parser.add_argument('--maxiter', type=int, help='Maximum number of iterations', default=30000)
+    parser.add_argument('--maxiter', type=int, help='Maximum number of iterations', default=32000)
     parser.add_argument('--init', type=str, help='Weight initialization file')
     parser.add_argument('--scratch', action='store_true', help='Train from scratch')
 

@@ -47,7 +47,7 @@ def get_split_df(df: pd.DataFrame, dataset: str, split: str) -> pd.DataFrame:
             split_df = df[df['folder'].isin(range(40, 50))]
         else:
             raise NotImplementedError('Unknown split: {}'.format(split))
-    elif dataset.startswith('ff-c23-720-140-140'):
+    elif dataset.startswith('ff-c40-720-140-140'):
         # Save random state
         st0 = np.random.get_state()
         # Set seed for this selection only
