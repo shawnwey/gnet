@@ -302,7 +302,7 @@ def main():
             optimizer.step()
             optimizer.zero_grad()
 
-            train_loader.set_description("Train Loss: {}".format(train_batch_loss.item()))
+            train_loader.set_description("Train Loss: {:.5f}".format(train_batch_loss.item()))
             # Logging
             if iteration > 0 and (iteration % log_interval == 0):
                 train_loss /= train_num
