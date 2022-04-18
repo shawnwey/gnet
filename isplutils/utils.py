@@ -22,6 +22,22 @@ from albumentations.pytorch import ToTensorV2
 from matplotlib import pyplot as plt
 from torch import nn as nn
 from torchvision import transforms
+from torch import optim
+
+
+def save_model(net: nn.Module, optimizer: optim.Optimizer,
+               train_loss: float, val_loss: float,
+               iteration: int, batch_size: int, epoch: int,
+               path: str):
+    path = str(path)
+    state = dict(net=net.state_dict(),
+                 opt=optimizer.state_dict(),
+                 train_loss=train_loss,
+                 val_loss=val_loss,
+                 iteration=iteration,
+                 batch_size=batch_size,
+                 epoch=epoch)
+    torch.save(state, path)
 
 
 def extract_meta_av(path: str) -> (int, int, int):

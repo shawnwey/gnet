@@ -16,10 +16,8 @@ import warnings
 
 import albumentations as A
 import numpy as np
-import pandas as pd
 import torch
 import torch.multiprocessing
-from torchvision.transforms import ToPILImage, ToTensor
 
 from isplutils import utils, split
 
@@ -33,13 +31,17 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from PIL import ImageChops, Image
 
+from core.config import create_log
 from architectures import fornet
 from isplutils.data import FrameFaceIterableDataset, load_face
+from isplutils.utils import save_model
+from core.train_val import validation, batch_forward, tb_attention
 
 
 def main():
     # Args
     parser = argparse.ArgumentParser()
+    parser.add_argument('--exp_id', type=str, default='EfficientNetB4')
     parser.add_argument('--env', type=int, default=0)
     parser.add_argument('--device', type=int, help='GPU device id', default=0)
     parser.add_argument('--net', type=str, help='Net model class', default='EfficientNetAutoAttB4')
@@ -65,7 +67,7 @@ def main():
     parser.add_argument('--valint', type=int, help='Validation interval (iterations)', default=500)
     parser.add_argument('--patience', type=int, help='Patience before dropping the LR [validation intervals]',
                         default=10)
-    parser.add_argument('--maxiter', type=int, help='Maximum number of iterations', default=32000)
+    parser.add_argument('--maxiter', type=int, help='Maximum number of iterations', default=35000)
     parser.add_argument('--init', type=str, help='Weight initialization file')
     parser.add_argument('--scratch', action='store_true', help='Train from scratch')
 
@@ -82,10 +84,8 @@ def main():
 
     parser.add_argument('--attention', action='store_true',
                         help='Enable Tensorboard log of attention masks')
-    parser.add_argument('--log_dir', type=str, help='Directory for saving the training logs',
-                        default='runs/binclass/')
-    parser.add_argument('--models_dir', type=str, help='Directory for saving the models weights',
-                        default='weights/binclass/')
+    parser.add_argument('--output_dir', type=str, help='Directory for saving the training logs',
+                        default='output')
     # --------------------------------------------------------------------
     parser.add_argument('--dfdc_faces_df_path', type=str, action='store',
                         help='Path to the Pandas Dataframe obtained from extract_faces.py on the DFDC dataset. '
@@ -125,14 +125,15 @@ def main():
     device = torch.device('cuda:{:d}'.format(args.device)) if torch.cuda.is_available() else torch.device('cpu')
     seed = args.seed
 
+    # log config
+    logger, weights_dir, log_dir = create_log(args.output_dir, args.exp_id)
+
     debug = args.debug
     suffix = args.suffix
 
     enable_attention = args.attention
-    print("=====> enable_attention: {}".format(enable_attention))
+    logger.info("=====> enable_attention: {}".format(enable_attention))
 
-    weights_folder = args.models_dir
-    logs_folder = args.log_dir
 
     # Random initialization
     np.random.seed(seed)
@@ -155,21 +156,19 @@ def main():
         min_lr=min_lr,
     )
 
-    tag = utils.make_train_tag(net_class=net_class,
-                               traindb=train_datasets,
-                               face_policy=face_policy,
-                               patch_size=face_size,
-                               seed=seed,
-                               suffix=suffix,
-                               debug=debug,
-                               )
+    # tag = utils.make_train_tag(net_class=net_class,
+    #                            traindb=train_datasets,
+    #                            face_policy=face_policy,
+    #                            patch_size=face_size,
+    #                            seed=seed,
+    #                            suffix=suffix,
+    #                            debug=debug,
+    #                            )
 
     # Model checkpoint paths
-    bestval_path = os.path.join(weights_folder, tag, 'bestval.pth')
-    last_path = os.path.join(weights_folder, tag, 'last.pth')
-    periodic_path = os.path.join(weights_folder, tag, 'it{:06d}.pth')
-
-    os.makedirs(os.path.join(weights_folder, tag), exist_ok=True)
+    bestval_path = os.path.join(weights_dir, 'bestval.pth')
+    last_path = os.path.join(weights_dir, 'last.pth')
+    periodic_path = os.path.join(weights_dir, 'it{:06d}.pth')
 
     # Load model
     val_loss = min_val_loss = 10
@@ -178,35 +177,37 @@ def main():
     opt_state = None
     if initial_model is not None:
         # If given load initial model
-        print('Loading model form: {}'.format(initial_model))
+        logger.info('Loading model form: {}'.format(initial_model))
         state = torch.load(initial_model, map_location='cpu')
         net_state = state['net']
+    # 自动恢复训练，从：last
     elif not train_from_scratch and os.path.exists(last_path):
-        print('Loading model form: {}'.format(last_path))
+        logger.info('Loading model form: {}'.format(last_path))
         state = torch.load(last_path, map_location='cpu')
         net_state = state['net']
         opt_state = state['opt']
         iteration = state['iteration'] + 1
         epoch = state['epoch']
+    # 取到最小 val_loss?
     if not train_from_scratch and os.path.exists(bestval_path):
         state = torch.load(bestval_path, map_location='cpu')
         min_val_loss = state['val_loss']
+
     if net_state is not None:
         incomp_keys = net.load_state_dict(net_state, strict=False)
-        print(incomp_keys)
+        logger.info(incomp_keys)
     if opt_state is not None:
         for param_group in opt_state['param_groups']:
             param_group['lr'] = initial_lr
         optimizer.load_state_dict(opt_state)
 
     # Initialize Tensorboard
-    logdir = os.path.join(logs_folder, tag)
     if iteration == 0:
         # If training from scratch or initialization remove history if exists
-        shutil.rmtree(logdir, ignore_errors=True)
+        shutil.rmtree(log_dir, ignore_errors=True)
 
     # TensorboardX instance
-    tb = SummaryWriter(logdir=logdir)
+    tb = SummaryWriter(logdir=log_dir)
     if iteration == 0:
         dummy = torch.randn((1, 3, face_size, face_size), device=device)
         dummy = dummy.to(device)
@@ -218,7 +219,7 @@ def main():
                                         net_normalizer=net.get_normalizer(), train=True)
 
     # Datasets and data loaders
-    print('Loading data')
+    logger.info('Loading data')
     # Check if paths for DFDC and FF++ extracted faces and DataFrames are provided
     for dataset in train_datasets:
         if dataset.split('-')[0] == 'dfdc' and (dfdc_df_path is None or dfdc_faces_dir is None):
@@ -258,15 +259,15 @@ def main():
 
     val_loader = DataLoader(val_dataset, num_workers=num_workers, batch_size=batch_size, )
 
-    print('Training samples: {}'.format(len(train_dataset)))
-    print('Validation samples: {}'.format(len(val_dataset)))
+    logger.info('Training samples: {}'.format(len(train_dataset)))
+    logger.info('Validation samples: {}'.format(len(val_dataset)))
 
     if len(train_dataset) == 0:
-        print('No training samples. Halt.')
+        logger.info('No training samples. Halt.')
         return
 
     if len(val_dataset) == 0:
-        print('No validation samples. Halt.')
+        logger.info('No validation samples. Halt.')
         return
 
     stop = False
@@ -278,8 +279,9 @@ def main():
         train_loss = train_num = 0
         train_pred_list = []
         train_labels_list = []
-        print("======== training: {} th epoch".format(epoch))
-        for train_batch in tqdm(train_loader, desc='Epoch {:05d}'.format(epoch)):
+        logger.info("======== training: {} th epoch".format(epoch))
+        train_loader = tqdm(train_loader)
+        for train_batch in train_loader:
             net.train()
             batch_data, batch_labels = train_batch
 
@@ -300,6 +302,7 @@ def main():
             optimizer.step()
             optimizer.zero_grad()
 
+            train_loader.set_description("Train Loss: {}".format(train_batch_loss.item()))
             # Logging
             if iteration > 0 and (iteration % log_interval == 0):
                 train_loss /= train_num
@@ -311,7 +314,7 @@ def main():
                 save_model(net, optimizer, train_loss, val_loss, iteration, batch_size, epoch, last_path)
                 train_loss = train_num = 0
 
-            # Validation
+            # ----- Validation -----
             if iteration > 0 and (iteration % validation_interval == 0):
 
                 # Model checkpoint
@@ -330,6 +333,7 @@ def main():
 
                 # Validation
                 val_loss = validation(net, device, val_loader, criterion, tb, iteration, 'val')
+                logger.info("val_loss: {}".format(val_loss))
                 tb.flush()
 
                 # LR Scheduler
@@ -338,6 +342,8 @@ def main():
                 # Model checkpoint
                 if val_loss < min_val_loss:
                     min_val_loss = val_loss
+                    logger.info('=====> val_loss[{}] is mimimum, saving bestval. epoch: {}, iter: {}'
+                                .format(val_loss, epoch, iteration))
                     save_model(net, optimizer, train_loss, val_loss, iteration, batch_size, epoch, bestval_path)
 
                 # Attention
@@ -355,14 +361,14 @@ def main():
                                      transformer, root, record)
 
                 if optimizer.param_groups[0]['lr'] == min_lr:
-                    print('Reached minimum learning rate. Stopping.')
+                    logger.info('Reached minimum learning rate. Stopping.')
                     stop = True
                     break
 
             iteration += 1
 
             if iteration > max_num_iterations:
-                print('Maximum number of iterations reached')
+                logger.info('Maximum number of iterations reached')
                 stop = True
                 break
 
@@ -373,95 +379,7 @@ def main():
     # Needed to flush out last events
     tb.close()
 
-    print('Completed')
-
-
-def tb_attention(tb: SummaryWriter,
-                 tag: str,
-                 iteration: int,
-                 net: nn.Module,
-                 device: torch.device,
-                 patch_size_load: int,
-                 face_crop_scale: str,
-                 val_transformer: A.BasicTransform,
-                 root: str,
-                 record: pd.Series,
-                 ):
-    # Crop face
-    sample_t = load_face(record=record, root=root, size=patch_size_load, scale=face_crop_scale,
-                         transformer=val_transformer)
-    sample_t_clean = load_face(record=record, root=root, size=patch_size_load, scale=face_crop_scale,
-                               transformer=ToTensorV2())
-    if torch.cuda.is_available():
-        sample_t = sample_t.cuda(device)
-    # Transform
-    # Feed to net
-    with torch.no_grad():
-        att: torch.Tensor = net.get_attention(sample_t.unsqueeze(0))[0].cpu()
-    att_img: Image.Image = ToPILImage()(att)
-    sample_img = ToPILImage()(sample_t_clean)
-    att_img = att_img.resize(sample_img.size, resample=Image.NEAREST).convert('RGB')
-    sample_att_img = ImageChops.multiply(sample_img, att_img)
-    sample_att = ToTensor()(sample_att_img)
-    tb.add_image(tag=tag, img_tensor=sample_att, global_step=iteration)
-
-
-def batch_forward(net: nn.Module, device: torch.device, criterion, data: torch.Tensor, labels: torch.Tensor) -> (
-        torch.Tensor, float, int):
-    data = data.to(device)
-    labels = labels.to(device)
-    out = net(data)
-    pred = torch.sigmoid(out).detach().cpu().numpy()
-    loss = criterion(out, labels)
-    return loss, pred
-
-
-def validation(net, device, val_loader, criterion, tb, iteration, tag: str, loader_len_norm: int = None):
-    net.eval()
-    loader_len_norm = loader_len_norm if loader_len_norm is not None else val_loader.batch_size
-    val_num = 0
-    val_loss = 0.
-    pred_list = list()
-    labels_list = list()
-    for val_data in tqdm(val_loader, desc='Validation'):
-        batch_data, batch_labels = val_data
-
-        val_batch_num = len(batch_labels)
-        labels_list.append(batch_labels.flatten())
-        with torch.no_grad():
-            val_batch_loss, val_batch_pred = batch_forward(net, device, criterion, batch_data,
-                                                           batch_labels)
-        pred_list.append(val_batch_pred.flatten())
-        val_num += val_batch_num
-        val_loss += val_batch_loss.item() * val_batch_num
-
-    # Logging
-    val_loss /= val_num
-    tb.add_scalar('{}/loss'.format(tag), val_loss, iteration)
-
-    if isinstance(criterion, nn.BCEWithLogitsLoss):
-        val_labels = np.concatenate(labels_list)
-        val_pred = np.concatenate(pred_list)
-        val_roc_auc = roc_auc_score(val_labels, val_pred)
-        tb.add_scalar('{}/roc_auc'.format(tag), val_roc_auc, iteration)
-        tb.add_pr_curve('{}/pr'.format(tag), val_labels, val_pred, iteration)
-
-    return val_loss
-
-
-def save_model(net: nn.Module, optimizer: optim.Optimizer,
-               train_loss: float, val_loss: float,
-               iteration: int, batch_size: int, epoch: int,
-               path: str):
-    path = str(path)
-    state = dict(net=net.state_dict(),
-                 opt=optimizer.state_dict(),
-                 train_loss=train_loss,
-                 val_loss=val_loss,
-                 iteration=iteration,
-                 batch_size=batch_size,
-                 epoch=epoch)
-    torch.save(state, path)
+    logger.info('Completed')
 
 
 if __name__ == '__main__':

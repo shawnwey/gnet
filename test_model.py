@@ -33,7 +33,7 @@ def main():
     # Args
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--testsets', type=str, help='Testing datasets', nargs='+', choices=split.available_datasets,
+    parser.add_argument('--testsets', type=list, help='Testing datasets', nargs='+', choices=split.available_datasets,
                         required=True)
     parser.add_argument('--testsplits', type=str, help='Test split', nargs='+', default=['val', 'test'],
                         choices=['train', 'val', 'test'])
