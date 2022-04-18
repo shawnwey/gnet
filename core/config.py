@@ -17,7 +17,7 @@ def create_log(output_dir, exp_id, phase='train'):
     final_output_dir.mkdir(parents=True, exist_ok=True)
 
     # weights
-    weights_dir = root_output_dir / 'weights'
+    weights_dir = final_output_dir / 'weights'
     print('=> creating {}'.format(weights_dir))
     weights_dir.mkdir(parents=True, exist_ok=True)
 
