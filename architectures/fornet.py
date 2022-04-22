@@ -18,6 +18,7 @@ from torch.nn import functional as F
 from torchvision import transforms
 
 from . import externals
+from architectures.gmodel import SAM
 
 """
 Feature Extractor
@@ -145,16 +146,17 @@ class EfficientNetGenAutoAtt(FeatureExtractor):
     def __init__(self, model: str, width: int):
         super(EfficientNetGenAutoAtt, self).__init__()
 
-        self.efficientnet = EfficientNetAutoAtt.from_pretrained(model)
-        self.efficientnet.init_att(model, width)
+        # self.efficientnet = EfficientNetAutoAtt.from_pretrained(model)
+        self.efficientnet = EfficientSA.from_pretrained(model)
+        self.efficientnet.init(model, width)
         self.classifier = nn.Linear(self.efficientnet._conv_head.out_channels, 1)
         del self.efficientnet._fc
 
-    def features(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.efficientnet.extract_features(x)
-        x = self.efficientnet._avg_pooling(x)
+    def features(self, x: torch.Tensor) -> torch.Tensor:  # [1, 3, 224, 224]
+        x = self.efficientnet.extract_features(x)  # [1, 1792, 7, 7]
+        x = self.efficientnet._avg_pooling(x)  # [B, 1792, 1, 1]
         x = x.flatten(start_dim=1)
-        return x
+        return x  # [1, 1792]
 
     def forward(self, x):
         x = self.features(x)
@@ -191,6 +193,39 @@ class Xception(FeatureExtractor):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.xception.forward(x)
+
+
+"""
+EfficientSA(Scale Attention)
+"""
+
+
+class EfficientSA(EfficientNet):
+    def init(self, model: str, width: int):
+        """
+        Initialize attention
+        :param model: efficientnet-bx, x \in {0,..,7}
+        :param depth: attention width
+        :return:
+        """
+        feats_shape = self._get_shape()
+        self.sa = SAM(feats_shape, 1792)
+
+    def extract_features(self, x: torch.Tensor) -> torch.Tensor:
+        endpoints = self.extract_endpoints(x)
+        x = self.sa(endpoints)
+        return x
+
+    def _get_shape(self) -> list:
+        with torch.no_grad():
+            x = torch.empty(1, 3, 224, 224)
+            feats = self.extract_endpoints(x)
+
+        if isinstance(feats, dict):
+            feats = feats.values()
+
+        feat_shapes = [f.shape for f in feats]
+        return feat_shapes
 
 
 """

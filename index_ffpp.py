@@ -26,7 +26,7 @@ def parse_args(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument('--source', type=Path, help='Source dir',
                         default='F:\ggy\dataset\FF')
-    parser.add_argument('--videodataset', type=Path, default=r'F:\ggy\dataset\FF_index/ffpp_videos.pkl',
+    parser.add_argument('--videodataset', type=Path, default=r'F:\ggy\dataset\FF/preprocess/ffpp_videos.pkl',
                         help='Path to save the videos DataFrame')
 
     return parser.parse_args(argv)

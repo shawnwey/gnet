@@ -27,7 +27,7 @@ def validation(net, device, val_loader, criterion, tb, iteration, tag: str, load
     val_loss = 0.
     pred_list = list()
     labels_list = list()
-    for val_data in tqdm(val_loader, leave=False, desc='Val'):
+    for val_data in tqdm(val_loader, desc='Val'):
         batch_data, batch_labels = val_data
 
         val_batch_num = len(batch_labels)

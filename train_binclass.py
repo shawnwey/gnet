@@ -41,9 +41,9 @@ from core.train_val import validation, batch_forward, tb_attention
 def main():
     # Args
     parser = argparse.ArgumentParser()
-    parser.add_argument('--exp_id', type=str, default='EfficientNetB4')
+    parser.add_argument('--exp_id', type=str, default='EfficientNetAutoAttB4')
     parser.add_argument('--env', type=int, default=0)
-    parser.add_argument('--device', type=int, help='GPU device id', default=0)
+    parser.add_argument('--device', type=int, help='GPU device id', default=1)
     parser.add_argument('--net', type=str, help='Net model class', default='EfficientNetAutoAttB4')
     parser.add_argument('--traindb', type=list, help='Training datasets', nargs='+', choices=split.available_datasets,
                         default=['ff-c40-720-140-140'])
@@ -67,7 +67,7 @@ def main():
     parser.add_argument('--valint', type=int, help='Validation interval (iterations)', default=500)
     parser.add_argument('--patience', type=int, help='Patience before dropping the LR [validation intervals]',
                         default=10)
-    parser.add_argument('--maxiter', type=int, help='Maximum number of iterations', default=35000)
+    parser.add_argument('--maxiter', type=int, help='Maximum number of iterations', default=40000)
     parser.add_argument('--init', type=str, help='Weight initialization file')
     parser.add_argument('--scratch', action='store_true', help='Train from scratch')
 
@@ -142,6 +142,9 @@ def main():
     # Load net
     net: nn.Module = net_class().to(device)
 
+    dummy = torch.randn((1, 3, face_size, face_size), device=device)
+    dummy = dummy.to(device)
+    net(dummy)
     # Loss and optimizers
     criterion = nn.BCEWithLogitsLoss()
 
@@ -209,11 +212,9 @@ def main():
     # TensorboardX instance
     tb = SummaryWriter(logdir=log_dir)
     if iteration == 0:
-        dummy = torch.randn((1, 3, face_size, face_size), device=device)
-        dummy = dummy.to(device)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            tb.add_graph(net, [dummy, ], verbose=False)
+            # tb.add_graph(net, [dummy, ], verbose=False)
 
     transformer = utils.get_transformer(face_policy=face_policy, patch_size=face_size,
                                         net_normalizer=net.get_normalizer(), train=True)
@@ -280,7 +281,7 @@ def main():
         train_pred_list = []
         train_labels_list = []
         logger.info("======== training: {} th epoch".format(epoch))
-        train_loader = tqdm(train_loader)
+        train_loader = tqdm(train_loader, leave=False)
         for train_batch in train_loader:
             net.train()
             batch_data, batch_labels = train_batch
