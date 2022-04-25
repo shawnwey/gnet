@@ -147,7 +147,7 @@ class EfficientNetGenAutoAtt(FeatureExtractor):
         super(EfficientNetGenAutoAtt, self).__init__()
 
         # self.efficientnet = EfficientNetAutoAtt.from_pretrained(model)
-        self.efficientnet = EfficientSA.from_pretrained(model)
+        self.efficientnet = EfficientNetAutoAtt.from_pretrained(model)
         self.efficientnet.init(model, width)
         self.classifier = nn.Linear(self.efficientnet._conv_head.out_channels, 1)
         del self.efficientnet._fc
@@ -171,6 +171,31 @@ class EfficientNetGenAutoAtt(FeatureExtractor):
 class EfficientNetAutoAttB4(EfficientNetGenAutoAtt):
     def __init__(self):
         super(EfficientNetAutoAttB4, self).__init__(model='efficientnet-b4', width=0)
+
+
+class EfficientNetSAB4(FeatureExtractor):
+    def __init__(self, model: str = 'efficientnet-b4', width: int = 0):
+        super(EfficientNetSAB4, self).__init__()
+
+        self.efficientnet = EfficientSA.from_pretrained(model)
+        self.efficientnet.init(model, width)
+        self.classifier = nn.Linear(self.efficientnet._conv_head.out_channels, 1)
+        del self.efficientnet._fc
+
+    def features(self, x: torch.Tensor) -> torch.Tensor:  # [1, 3, 224, 224]
+        x = self.efficientnet.extract_features(x)  # [1, 1792, 7, 7]
+        x = self.efficientnet._avg_pooling(x)  # [B, 1792, 1, 1]
+        x = x.flatten(start_dim=1)
+        return x  # [1, 1792]
+
+    def forward(self, x):
+        x = self.features(x)
+        x = self.efficientnet._dropout(x)
+        x = self.classifier(x)
+        return x
+
+    def get_attention(self, x: torch.Tensor) -> torch.Tensor:
+        return self.efficientnet.get_attention(x)
 
 
 """

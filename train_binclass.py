@@ -41,9 +41,10 @@ from core.train_val import validation, batch_forward, tb_attention
 def main():
     # Args
     parser = argparse.ArgumentParser()
-    parser.add_argument('--exp_id', type=str, default='EfficientNetAutoAttB4')
+    # 命名规定：网络名称（用net拼接）-其他实验因素，下划线区分
+    parser.add_argument('--exp_id', type=str, default='sa_interpolate_eca')
     parser.add_argument('--env', type=int, default=0)
-    parser.add_argument('--device', type=int, help='GPU device id', default=1)
+    parser.add_argument('--device', type=int, help='GPU device id', default=0)
     parser.add_argument('--net', type=str, help='Net model class', default='EfficientNetAutoAttB4')
     parser.add_argument('--traindb', type=list, help='Training datasets', nargs='+', choices=split.available_datasets,
                         default=['ff-c40-720-140-140'])
@@ -62,7 +63,7 @@ def main():
                         default='scale')
     parser.add_argument('--size', type=int, help='Train patch size', default=224)
 
-    parser.add_argument('--batch', type=int, help='Batch size to fit in GPU memory', default=24)
+    parser.add_argument('--batch', type=int, help='Batch size to fit in GPU memory', default=18)
     parser.add_argument('--lr', type=float, default=1e-5, help='Learning rate')
     parser.add_argument('--valint', type=int, help='Validation interval (iterations)', default=500)
     parser.add_argument('--patience', type=int, help='Patience before dropping the LR [validation intervals]',
@@ -122,10 +123,12 @@ def main():
 
     log_interval = args.logint
     num_workers = args.workers
+    args.device = 0 if args.env == 0 else args.device
     device = torch.device('cuda:{:d}'.format(args.device)) if torch.cuda.is_available() else torch.device('cpu')
     seed = args.seed
 
     # log config
+    args.exp_id = args.net + '-' + args.exp_id
     logger, weights_dir, log_dir = create_log(args.output_dir, args.exp_id)
 
     debug = args.debug

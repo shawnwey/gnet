@@ -9,6 +9,7 @@ Sara Mandelli
 Luca Bondi
 Paolo Bestagini
 """
+import os
 import argparse
 import gc
 from collections import OrderedDict
@@ -33,8 +34,11 @@ def main():
     # Args
     parser = argparse.ArgumentParser()
 
+    # 命名规定：网络名称（用net拼接）-其他实验因素，下划线区分
+    parser.add_argument('--exp_id', type=str, default='EfficientNetB4-sa_chazhi_eca')
+    parser.add_argument('--device', type=int, help='GPU id', default=0)
     parser.add_argument('--testsets', type=list, help='Testing datasets', nargs='+', choices=split.available_datasets,
-                        required=True)
+                        default=['ff-c40-720-140-140',])
     parser.add_argument('--testsplits', type=str, help='Test split', nargs='+', default=['val', 'test'],
                         choices=['train', 'val', 'test'])
     parser.add_argument('--dfdc_faces_df_path', type=str, action='store',
@@ -45,24 +49,30 @@ def main():
                              'Required for training/validating on the DFDC dataset.')
     parser.add_argument('--ffpp_faces_df_path', type=str, action='store',
                         help='Path to the Pandas Dataframe obtained from extract_faces.py on the FF++ dataset. '
-                             'Required for training/validating on the FF++ dataset.')
+                             'Required for training/validating on the FF++ dataset.',
+                        default='FF/preprocess/facesDataFrames')
     parser.add_argument('--ffpp_faces_dir', type=str, action='store',
                         help='Path to the directory containing the faces extracted from the FF++ dataset. '
-                             'Required for training/validating on the FF++ dataset.')
+                             'Required for training/validating on the FF++ dataset.',
+                        default='FF/preprocess/faces')
 
+    parser.add_argument('--face', type=str, help='Face crop or scale',
+                        choices=['scale', 'tight'],
+                        default='scale')
+    parser.add_argument('--size', type=int, help='Train patch size', default=224)
     # Specify trained model path
-    parser.add_argument('--model_path', type=Path, help='Full path of the trained model', required=True)
+    parser.add_argument('--ckpt_name', type=str, help='Full path of the trained model',
+                        default='bestval.pth')
 
     # Common params
     parser.add_argument('--batch', type=int, help='Batch size to fit in GPU memory', default=128)
 
     parser.add_argument('--workers', type=int, help='Num workers for data loaders', default=6)
-    parser.add_argument('--device', type=int, help='GPU id', default=0)
 
     parser.add_argument('--debug', action='store_true', help='Debug flag', )
     parser.add_argument('--num_video', type=int, help='Number of real-fake videos to test')
     parser.add_argument('--results_dir', type=Path, help='Output folder',
-                        default='results/')
+                        default='output_test/')
 
     parser.add_argument('--override', action='store_true', help='Override existing results', )
 
@@ -72,7 +82,7 @@ def main():
     num_workers: int = args.workers
     batch_size: int = args.batch
     max_num_videos_per_label: int = args.num_video  # number of real-fake videos to test
-    model_path: Path = args.model_path
+    model_path: Path = Path(os.path.join('output', args.exp_id, 'weights', args.ckpt_name))
     results_dir: Path = args.results_dir
     debug: bool = args.debug
     override: bool = args.override
@@ -83,17 +93,22 @@ def main():
     dfdc_faces_dir = args.dfdc_faces_dir
     ffpp_faces_dir = args.ffpp_faces_dir
 
+    face_policy = args.face
+    patch_size = args.size
+
+
     # get arguments from the model path
-    face_policy = str(model_path).split('face-')[1].split('_')[0]
-    patch_size = int(str(model_path).split('size-')[1].split('_')[0])
-    net_name = str(model_path).split('net-')[1].split('_')[0]
-    model_name = '_'.join(model_path.with_suffix('').parts[-2:])
+    exp_id = os.path.basename(os.path.dirname(os.path.dirname(model_path)))
+    net_name = exp_id.split('-')[0]
+    # Output paths
+    out_folder = results_dir.joinpath(exp_id)
+    out_folder.mkdir(mode=0o775, parents=True, exist_ok=True)
 
     # Load net
     net_class = getattr(fornet, net_name)
 
     # load model
-    print('Loading model...')
+    print('Loading model [{}]...'.format(net_name))
     state_tmp = torch.load(model_path, map_location='cpu')
     if 'net' not in state_tmp.keys():
         state = OrderedDict({'net': OrderedDict()})
@@ -128,10 +143,6 @@ def main():
     val_dfs = [splits['val'][db][0] for db in splits['val']]
     test_dfs = [splits['test'][db][0] for db in splits['test']]
     test_roots = [splits['test'][db][1] for db in splits['test']]
-
-    # Output paths
-    out_folder = results_dir.joinpath(model_name)
-    out_folder.mkdir(mode=0o775, parents=True, exist_ok=True)
 
     # Samples selection
     if max_num_videos_per_label and max_num_videos_per_label > 0:
