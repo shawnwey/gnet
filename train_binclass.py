@@ -42,10 +42,10 @@ def main():
     # Args
     parser = argparse.ArgumentParser()
     # 命名规定：网络名称（用net拼接）-其他实验因素，下划线区分
-    parser.add_argument('--exp_id', type=str, default='sa_interpolate_eca')
+    parser.add_argument('--exp_id', type=str, default='EfficientNetSAB4-sa_interpolate_eca')
     parser.add_argument('--env', type=int, default=0)
     parser.add_argument('--device', type=int, help='GPU device id', default=0)
-    parser.add_argument('--net', type=str, help='Net model class', default='EfficientNetAutoAttB4')
+    parser.add_argument('--net', type=str, help='Net model class', default='EfficientNetSAB4')
     parser.add_argument('--traindb', type=list, help='Training datasets', nargs='+', choices=split.available_datasets,
                         default=['ff-c40-720-140-140'])
     parser.add_argument('--valdb', type=list, help='Validation datasets', nargs='+', choices=split.available_datasets,
@@ -128,7 +128,6 @@ def main():
     seed = args.seed
 
     # log config
-    args.exp_id = args.net + '-' + args.exp_id
     logger, weights_dir, log_dir = create_log(args.output_dir, args.exp_id)
 
     debug = args.debug

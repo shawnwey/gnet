@@ -28,6 +28,7 @@ from architectures import fornet
 from architectures.fornet import FeatureExtractor
 from isplutils import utils, split
 from isplutils.data import FrameFaceDatasetTest
+from core.analyze import analyze_net_pklResults
 
 
 def main():
@@ -35,13 +36,17 @@ def main():
     parser = argparse.ArgumentParser()
 
     # 命名规定：网络名称（用net拼接）-其他实验因素，下划线区分
-    parser.add_argument('--exp_id', type=str, default='EfficientNetB4-sa_chazhi_eca')
+    parser.add_argument('--exp_id', type=str, default='EfficientNetB4-baseline')
+    # Specify trained model path
+    parser.add_argument('--ckpt_name', type=str, help='Full path of the trained model',
+                        default='last.pth')
     parser.add_argument('--device', type=int, help='GPU id', default=0)
     parser.add_argument('--env', type=int, default=0)
+    parser.add_argument('--testsplits', type=str, help='Test split', nargs='+', default=['test', 'val'],
+                        choices=['train', 'val', 'test'])
+
     parser.add_argument('--testsets', type=list, help='Testing datasets', nargs='+', choices=split.available_datasets,
                         default=['ff-c40-720-140-140',])
-    parser.add_argument('--testsplits', type=str, help='Test split', nargs='+', default=['val', 'test'],
-                        choices=['train', 'val', 'test'])
     parser.add_argument('--dfdc_faces_df_path', type=str, action='store',
                         help='Path to the Pandas Dataframe obtained from extract_faces.py on the DFDC dataset. '
                              'Required for training/validating on the DFDC dataset.')
@@ -61,21 +66,17 @@ def main():
                         choices=['scale', 'tight'],
                         default='scale')
     parser.add_argument('--size', type=int, help='Train patch size', default=224)
-    # Specify trained model path
-    parser.add_argument('--ckpt_name', type=str, help='Full path of the trained model',
-                        default='bestval.pth')
-
     # Common params
     parser.add_argument('--batch', type=int, help='Batch size to fit in GPU memory', default=128)
 
     parser.add_argument('--workers', type=int, help='Num workers for data loaders', default=6)
 
-    parser.add_argument('--debug', action='store_true', help='Debug flag', default=True)
+    parser.add_argument('--debug', action='store_true', help='Debug flag', default=False)
     parser.add_argument('--num_video', type=int, help='Number of real-fake videos to test')
     parser.add_argument('--results_dir', type=Path, help='Output folder',
                         default='output_test/')
 
-    parser.add_argument('--override', action='store_true', help='Override existing results', )
+    parser.add_argument('--override', action='store_true', help='Override existing results', default=True)
 
     args = parser.parse_args()
 
@@ -101,7 +102,7 @@ def main():
 
 
     # get arguments from the model path
-    exp_id = os.path.basename(os.path.dirname(os.path.dirname(model_path)))
+    exp_id = args.exp_id
     net_name = exp_id.split('-')[0]
     # Output paths
     out_folder = results_dir.joinpath(exp_id)
@@ -207,6 +208,7 @@ def main():
     if debug:
         plt.show()
 
+    analyze_net_pklResults(exp_id)
     print('Completed!')
 
 
