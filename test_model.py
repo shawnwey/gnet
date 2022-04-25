@@ -37,6 +37,7 @@ def main():
     # 命名规定：网络名称（用net拼接）-其他实验因素，下划线区分
     parser.add_argument('--exp_id', type=str, default='EfficientNetB4-sa_chazhi_eca')
     parser.add_argument('--device', type=int, help='GPU id', default=0)
+    parser.add_argument('--env', type=int, default=0)
     parser.add_argument('--testsets', type=list, help='Testing datasets', nargs='+', choices=split.available_datasets,
                         default=['ff-c40-720-140-140',])
     parser.add_argument('--testsplits', type=str, help='Test split', nargs='+', default=['val', 'test'],
@@ -69,7 +70,7 @@ def main():
 
     parser.add_argument('--workers', type=int, help='Num workers for data loaders', default=6)
 
-    parser.add_argument('--debug', action='store_true', help='Debug flag', )
+    parser.add_argument('--debug', action='store_true', help='Debug flag', default=True)
     parser.add_argument('--num_video', type=int, help='Number of real-fake videos to test')
     parser.add_argument('--results_dir', type=Path, help='Output folder',
                         default='output_test/')
@@ -88,10 +89,12 @@ def main():
     override: bool = args.override
     test_sets = args.testsets
     test_splits = args.testsplits
+
+    ds_root = ['F:/ggy/dataset', '/home/disk/weixing/datasets']
+    ffpp_df_path = os.path.join(ds_root[args.env], args.ffpp_faces_df_path)
+    ffpp_faces_dir = os.path.join(ds_root[args.env], args.ffpp_faces_dir)
     dfdc_df_path = args.dfdc_faces_df_path
-    ffpp_df_path = args.ffpp_faces_df_path
     dfdc_faces_dir = args.dfdc_faces_dir
-    ffpp_faces_dir = args.ffpp_faces_dir
 
     face_policy = args.face
     patch_size = args.size
