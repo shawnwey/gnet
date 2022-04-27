@@ -79,7 +79,7 @@ EfficientNetAutoAtt
 
 
 class EfficientNetAutoAtt(EfficientNet):
-    def init_att(self, model: str, width: int):
+    def init(self, model: str, width: int):
         """
         Initialize attention
         :param model: efficientnet-bx, x \in {0,..,7}

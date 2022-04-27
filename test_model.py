@@ -31,7 +31,7 @@ from isplutils.data import FrameFaceDatasetTest
 from core.analyze import analyze_net_pklResults
 
 
-def main():
+def test(exp_id: str = 'main'):
     # Args
     parser = argparse.ArgumentParser()
 
@@ -46,7 +46,7 @@ def main():
                         choices=['train', 'val', 'test'])
 
     parser.add_argument('--testsets', type=list, help='Testing datasets', nargs='+', choices=split.available_datasets,
-                        default=['ff-c40-720-140-140',])
+                        default=['ff-c40-720-140-140', ])
     parser.add_argument('--dfdc_faces_df_path', type=str, action='store',
                         help='Path to the Pandas Dataframe obtained from extract_faces.py on the DFDC dataset. '
                              'Required for training/validating on the DFDC dataset.')
@@ -100,9 +100,9 @@ def main():
     face_policy = args.face
     patch_size = args.size
 
-
     # get arguments from the model path
-    exp_id = args.exp_id
+    if exp_id == 'main':
+        exp_id = args.exp_id
     net_name = exp_id.split('-')[0]
     # Output paths
     out_folder = results_dir.joinpath(exp_id)
@@ -283,4 +283,4 @@ def select_videos(df: pd.DataFrame, max_videos_per_label: int) -> pd.DataFrame:
 
 
 if __name__ == '__main__':
-    main()
+    test()

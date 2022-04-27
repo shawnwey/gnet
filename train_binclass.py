@@ -36,6 +36,7 @@ from architectures import fornet
 from isplutils.data import FrameFaceIterableDataset, load_face
 from isplutils.utils import save_model
 from core.train_val import validation, batch_forward, tb_attention
+from test_model import test
 
 
 def main():
@@ -129,6 +130,8 @@ def main():
 
     # log config
     logger, weights_dir, log_dir = create_log(args.output_dir, args.exp_id)
+    for arg in vars(args):
+        logger.info(format(arg, '<20')  + ' ' + format(str(getattr(args, arg)), '<'))   # str, arg_type
 
     debug = args.debug
     suffix = args.suffix
@@ -382,7 +385,9 @@ def main():
     # Needed to flush out last events
     tb.close()
 
-    logger.info('Completed')
+    logger.info('Train Completed')
+
+    test(args.exp_id)
 
 
 if __name__ == '__main__':
