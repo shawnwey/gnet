@@ -286,7 +286,7 @@ def main():
         train_pred_list = []
         train_labels_list = []
         logger.info("======== training: {} th epoch".format(epoch))
-        train_loader = tqdm(train_loader, leave=False)
+        train_loader = tqdm(train_loader, leave=True)
         for train_batch in train_loader:
             net.train()
             batch_data, batch_labels = train_batch
@@ -338,8 +338,8 @@ def main():
                 tb.add_pr_curve('train/pr', train_labels, train_pred, iteration)
 
                 # Validation
-                val_loss = validation(net, device, val_loader, criterion, tb, iteration, 'val')
-                logger.info("val_loss: {}".format(val_loss))
+                val_loss, val_roc_auc = validation(net, device, val_loader, criterion, tb, iteration, 'val')
+                logger.info("val_loss: {}, auc: {}".format(val_loss, val_roc_auc))
                 tb.flush()
 
                 # LR Scheduler

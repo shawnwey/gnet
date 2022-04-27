@@ -43,6 +43,7 @@ def validation(net, device, val_loader, criterion, tb, iteration, tag: str, load
     val_loss /= val_num
     tb.add_scalar('{}/loss'.format(tag), val_loss, iteration)
 
+    val_roc_auc = -1
     if isinstance(criterion, nn.BCEWithLogitsLoss):
         val_labels = np.concatenate(labels_list)
         val_pred = np.concatenate(pred_list)
@@ -50,7 +51,7 @@ def validation(net, device, val_loader, criterion, tb, iteration, tag: str, load
         tb.add_scalar('{}/roc_auc'.format(tag), val_roc_auc, iteration)
         tb.add_pr_curve('{}/pr'.format(tag), val_labels, val_pred, iteration)
 
-    return val_loss
+    return val_loss, val_roc_auc
 
 def batch_forward(net: nn.Module, device: torch.device, criterion, data: torch.Tensor, labels: torch.Tensor) -> (
         torch.Tensor, float, int):
