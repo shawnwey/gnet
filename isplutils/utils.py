@@ -261,3 +261,14 @@ def aggregate(x, deadzone: float, pre_mult: float, policy: str, post_mult: float
     else:
         raise NotImplementedError()
     return np.clip(x, clipmargin, 1 - clipmargin)
+
+def _get_shape(model) -> list:
+    with torch.no_grad():
+        x = torch.empty(1, 3, 224, 224)
+        feats = model.extract_endpoints(x)
+
+    if isinstance(feats, dict):
+        feats = feats.values()
+
+    feat_shapes = [f.shape for f in feats]
+    return feat_shapes

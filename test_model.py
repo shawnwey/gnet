@@ -78,7 +78,7 @@ def test(exp_id: str = 'main'):
 
     parser.add_argument('--override', action='store_true', help='Override existing results', default=True)
 
-    args = parser.parse_args()
+    args, _ = parser.parse_known_args()
 
     device = torch.device('cuda:{}'.format(args.device)) if torch.cuda.is_available() else torch.device('cpu')
     num_workers: int = args.workers

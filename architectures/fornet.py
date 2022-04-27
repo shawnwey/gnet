@@ -18,7 +18,7 @@ from torch.nn import functional as F
 from torchvision import transforms
 
 from . import externals
-from architectures.gmodel import SAM
+from architectures.gmodel import SAM, GHead
 
 """
 Feature Extractor
@@ -173,29 +173,29 @@ class EfficientNetAutoAttB4(EfficientNetGenAutoAtt):
         super(EfficientNetAutoAttB4, self).__init__(model='efficientnet-b4', width=0)
 
 
+"""
+EfficientSA(Scale Attention)
+"""
+
+
 class EfficientNetSAB4(FeatureExtractor):
     def __init__(self, model: str = 'efficientnet-b4', width: int = 0):
         super(EfficientNetSAB4, self).__init__()
-
-        self.efficientnet = EfficientSA.from_pretrained(model)
-        self.efficientnet.init(model, width)
-        self.classifier = nn.Linear(self.efficientnet._conv_head.out_channels, 1)
+        # efficientnet
+        self.efficientnet = EfficientNet.from_pretrained(model)
         del self.efficientnet._fc
 
-    def features(self, x: torch.Tensor) -> torch.Tensor:  # [1, 3, 224, 224]
-        x = self.efficientnet.extract_features(x)  # [1, 1792, 7, 7]
-        x = self.efficientnet._avg_pooling(x)  # [B, 1792, 1, 1]
-        x = x.flatten(start_dim=1)
-        return x  # [1, 1792]
+        # head
+        self.ghead = GHead(self.efficientnet)
 
-    def forward(self, x):
-        x = self.features(x)
-        x = self.efficientnet._dropout(x)
-        x = self.classifier(x)
-        return x
+        self.classifier = nn.Linear(self.efficientnet._conv_head.out_channels, 1)
 
-    def get_attention(self, x: torch.Tensor) -> torch.Tensor:
-        return self.efficientnet.get_attention(x)
+
+    def forward(self, x):     # [1, 3, 224, 224]
+        endpoints = self.efficientnet.extract_endpoints(x)  # 6 x [B, _, _, _]
+
+        x = self.ghead(endpoints)
+        return x    # [1, 1]
 
 
 """
@@ -218,39 +218,6 @@ class Xception(FeatureExtractor):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.xception.forward(x)
-
-
-"""
-EfficientSA(Scale Attention)
-"""
-
-
-class EfficientSA(EfficientNet):
-    def init(self, model: str, width: int):
-        """
-        Initialize attention
-        :param model: efficientnet-bx, x \in {0,..,7}
-        :param depth: attention width
-        :return:
-        """
-        feats_shape = self._get_shape()
-        self.sa = SAM(feats_shape, 1792)
-
-    def extract_features(self, x: torch.Tensor) -> torch.Tensor:
-        endpoints = self.extract_endpoints(x)
-        x = self.sa(endpoints)
-        return x
-
-    def _get_shape(self) -> list:
-        with torch.no_grad():
-            x = torch.empty(1, 3, 224, 224)
-            feats = self.extract_endpoints(x)
-
-        if isinstance(feats, dict):
-            feats = feats.values()
-
-        feat_shapes = [f.shape for f in feats]
-        return feat_shapes
 
 
 """
