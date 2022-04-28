@@ -67,7 +67,7 @@ def test(exp_id: str = 'main'):
                         default='scale')
     parser.add_argument('--size', type=int, help='Train patch size', default=224)
     # Common params
-    parser.add_argument('--batch', type=int, help='Batch size to fit in GPU memory', default=128)
+    parser.add_argument('--batch', type=int, help='Batch size to fit in GPU memory', default=64)
 
     parser.add_argument('--workers', type=int, help='Num workers for data loaders', default=6)
 

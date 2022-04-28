@@ -27,7 +27,7 @@ def validation(net, device, val_loader, criterion, tb, iteration, tag: str, load
     val_loss = 0.
     pred_list = list()
     labels_list = list()
-    for val_data in tqdm(val_loader, desc='Val'):
+    for val_data in tqdm(val_loader, desc='Val', leave=True):
         batch_data, batch_labels = val_data
 
         val_batch_num = len(batch_labels)
@@ -43,7 +43,7 @@ def validation(net, device, val_loader, criterion, tb, iteration, tag: str, load
     val_loss /= val_num
     tb.add_scalar('{}/loss'.format(tag), val_loss, iteration)
 
-    val_roc_auc = -1
+    val_roc_auc = 0
     if isinstance(criterion, nn.BCEWithLogitsLoss):
         val_labels = np.concatenate(labels_list)
         val_pred = np.concatenate(pred_list)

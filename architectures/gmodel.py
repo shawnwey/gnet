@@ -157,7 +157,7 @@ class GHead(nn.Module):
         self.efficientNet = model
         # fpn
         feats_shapes = _get_shape(model)
-        out_channels = 128
+        out_channels = 256
         self.fpn = FPN(feats_shapes, hidden_channels=256, out_channels=out_channels)
         self.predictors = nn.ModuleList([Predictor(out_channels, shape) for shape in feats_shapes])
         # specific classifier
