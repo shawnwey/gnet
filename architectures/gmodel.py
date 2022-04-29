@@ -13,6 +13,67 @@ from isplutils.containers import (Parallel, SequentialMultiInputMultiOutput)
 from isplutils.layers import (Interpolate, Reverse, Sum)
 
 
+class GHead(nn.Module):
+    def __init__(self, model):
+        super(GHead, self).__init__()
+        self.efficientNet = model
+        # fpn
+        feats_shapes = _get_shape(model)
+        out_channels = 128
+        self.fpn = FPN(feats_shapes, hidden_channels=256, out_channels=out_channels)
+        self.predictors = nn.ModuleList([Predictor(out_channels, shape) for shape in feats_shapes])
+        # specific classifier
+        self.sp_ap = nn.AdaptiveAvgPool2d(1)
+        self.sp_classifier = nn.Linear(self.efficientNet._conv_head.out_channels, 1)
+        # final classifier
+        self.final_classifier = nn.Linear(len(feats_shapes) + 1, 1)
+
+    def forward(self, x_dict):
+        feats = tuple(x_dict.values())
+        # specific classification
+        x = feats[-1]
+        x = self.sp_ap(x).flatten(start_dim=1)  # [B, 1792, 1, 1]
+        x = self.efficientNet._dropout(x)
+        x = self.sp_classifier(x)
+
+        feats = self.fpn(feats)
+        outs = [x]
+        for i in range(len(self.predictors)):
+            outs.append(self.predictors[i](feats[i]))
+
+        x = torch.cat(outs, dim=1)
+        x = self.final_classifier(x)
+        return x
+
+
+class SpatialAttention(nn.Module):
+    def __init__(self,kernel_size=7):
+        super(SpatialAttention, self).__init__()
+        self.conv=nn.Conv2d(2,1,kernel_size=kernel_size,padding=kernel_size//2)
+        self.sigmoid=nn.Sigmoid()
+
+    def forward(self, x) :
+        max_result,_=torch.max(x,dim=1,keepdim=True)
+        avg_result=torch.mean(x,dim=1,keepdim=True)
+        result=torch.cat([max_result,avg_result],1)
+        output=self.conv(result)
+        output=self.sigmoid(output)
+        return output
+
+
+class AttentionConv(nn.Module):
+    def __init__(self, hidden_channels, out_channels):
+        super(AttentionConv, self).__init__()
+        self.sa = SpatialAttention()
+        self.conv = nn.Conv2d(hidden_channels, out_channels, kernel_size=3, padding=1)
+
+    def forward(self, x):
+        att = self.sa(x)
+        x = x * att
+        x = self.conv(x)
+        return x
+
+
 class FPN(nn.Sequential):
     """
     Implementation of the architecture described in the paper
@@ -94,7 +155,7 @@ class FPN(nn.Sequential):
         )
 
         out_convs = Parallel([
-            nn.Conv2d(hidden_channels, out_channels, kernel_size=3, padding=1)
+            AttentionConv(hidden_channels, out_channels)
             for _ in in_feats_shapes
         ])
         layers = [
@@ -148,39 +209,6 @@ class Predictor(nn.Module):
         x = x.flatten(start_dim=1)
         x = self.dropout(x)
         x = self.classifier(x)
-        return x
-
-
-class GHead(nn.Module):
-    def __init__(self, model):
-        super(GHead, self).__init__()
-        self.efficientNet = model
-        # fpn
-        feats_shapes = _get_shape(model)
-        out_channels = 256
-        self.fpn = FPN(feats_shapes, hidden_channels=256, out_channels=out_channels)
-        self.predictors = nn.ModuleList([Predictor(out_channels, shape) for shape in feats_shapes])
-        # specific classifier
-        self.sp_ap = nn.AdaptiveAvgPool2d(1)
-        self.sp_classifier = nn.Linear(self.efficientNet._conv_head.out_channels, 1)
-        # final classifier
-        self.final_classifier = nn.Linear(len(feats_shapes) + 1, 1)
-
-    def forward(self, x_dict):
-        feats = tuple(x_dict.values())
-        # specific classification
-        x = feats[-1]
-        x = self.sp_ap(x).flatten(start_dim=1)  # [B, 1792, 1, 1]
-        x = self.efficientNet._dropout(x)
-        x = self.sp_classifier(x)
-
-        feats = self.fpn(feats)
-        outs = [x]
-        for i in range(len(self.predictors)):
-            outs.append(self.predictors[i](feats[i]))
-
-        x = torch.cat(outs, dim=1)
-        x = self.final_classifier(x)
         return x
 
 
