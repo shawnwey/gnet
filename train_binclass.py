@@ -286,7 +286,7 @@ def main():
         train_pred_list = []
         train_labels_list = []
         logger.info("======== training: {} th epoch".format(epoch))
-        train_loader = tqdm(train_loader, leave=True)
+        train_loader = tqdm(train_loader, leave=False)
         for train_batch in train_loader:
             net.train()
             batch_data, batch_labels = train_batch
