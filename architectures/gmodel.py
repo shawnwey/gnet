@@ -64,11 +64,13 @@ class SpatialAttention(nn.Module):
 class AttentionConv(nn.Module):
     def __init__(self, hidden_channels, out_channels):
         super(AttentionConv, self).__init__()
-        self.sa = SpatialAttention()
+        # self.sa = SpatialAttention()
+        self.eca = ECA(hidden_channels)
         self.conv = nn.Conv2d(hidden_channels, out_channels, kernel_size=3, padding=1)
 
     def forward(self, x):
-        att = self.sa(x)
+        # att = self.sa(x)
+        att = self.eca(x)
         x = x * att
         x = self.conv(x)
         return x
