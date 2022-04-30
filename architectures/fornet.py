@@ -307,6 +307,34 @@ class EfficientNetSGE(EfficientNet):
 
         return endpoints
 
+    def extract_features(self, inputs):
+        """use convolution layer to extract feature .
+
+        Args:
+            inputs (tensor): Input tensor.
+
+        Returns:
+            Output of the final convolution
+            layer in the efficientnet model.
+        """
+        # Stem
+        x = self._swish(self._bn0(self._conv_stem(inputs)))
+
+        # Blocks
+        for idx, block in enumerate(self._blocks):
+            drop_connect_rate = self._global_params.drop_connect_rate
+            if drop_connect_rate:
+                drop_connect_rate *= float(idx) / len(self._blocks)  # scale drop connect_rate
+            x = block(x, drop_connect_rate=drop_connect_rate)
+            # ---------- SGE -----------
+            x = self.sges[idx](x)
+            # ---------- SGE -----------
+
+        # Head
+        x = self._swish(self._bn1(self._conv_head(x)))
+
+        return x
+
 
 class SgeMspNet(FeatureExtractor):
 
@@ -318,12 +346,32 @@ class SgeMspNet(FeatureExtractor):
         del self.efficientnet._fc
 
         # head
-        self.ghead = MSPHead(self.efficientnet)
+        self.mspHead = MSPHead(self.efficientnet)
 
     def forward(self, x):     # [1, 3, 224, 224]
         endpoints = self.efficientnet.extract_endpoints(x)  # 6 x [B, _, _, _]
 
-        x = self.ghead(endpoints)
+        x = self.mspHead(endpoints)
         return x    # [1, 1]
 
 
+class SgeNet(FeatureExtractor):
+
+    def __init__(self, model: str = 'efficientnet-b4'):
+        super(SgeNet, self).__init__()
+        # efficientnet
+        self.efficientnet = EfficientNetSGE.from_pretrained(model)
+        self.efficientnet.init()
+        del self.efficientnet._fc
+
+        # head
+        self.classifier = nn.Linear(self.efficientnet._conv_head.out_channels, 1)
+
+    def forward(self, x):     # [1, 3, 224, 224]
+        x = self.efficientnet.extract_features(x)  # 6 x [B, _, _, _]
+
+        x = self.efficientnet._avg_pooling(x)  # [B, 1792, 1, 1]
+        x = x.flatten(start_dim=1)
+        x = self.efficientnet._dropout(x)
+        x = self.classifier(x)
+        return x    # [1, 1]
