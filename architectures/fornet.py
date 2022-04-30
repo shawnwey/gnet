@@ -255,7 +255,8 @@ EfficientSA(Scale Attention)
 class EfficientNetSGE(EfficientNet):
     def init(self):
         # SGE
-        self.sges = nn.ModuleList([SpatialGroupEnhance() for i in range(len(self._blocks))])
+        self.sge_block_idxs = [9]
+        self.sges = nn.ModuleList([SpatialGroupEnhance() for i in range(len(self.sge_block_idxs))])
 
     def extract_endpoints(self, inputs):
         """Use convolution layer to extract features
@@ -287,14 +288,17 @@ class EfficientNetSGE(EfficientNet):
         prev_x = x
 
         # Blocks
+        sge_idx = 0
         for idx, block in enumerate(self._blocks):
             drop_connect_rate = self._global_params.drop_connect_rate
             if drop_connect_rate:
                 drop_connect_rate *= float(idx) / len(self._blocks)  # scale drop connect_rate
             x = block(x, drop_connect_rate=drop_connect_rate)
-            # ---------- SGE -----------
-            x = self.sges[idx](x)
-            # ---------- SGE -----------
+            if idx in self.sge_block_idxs:
+                # ---------- SGE -----------
+                x = self.sges[sge_idx](x)
+                sge_idx = sge_idx + 1
+                # ---------- SGE -----------
             if prev_x.size(2) > x.size(2):
                 endpoints['reduction_{}'.format(len(endpoints) + 1)] = prev_x
             elif idx == len(self._blocks) - 1:
@@ -321,14 +325,17 @@ class EfficientNetSGE(EfficientNet):
         x = self._swish(self._bn0(self._conv_stem(inputs)))
 
         # Blocks
+        sge_idx = 0
         for idx, block in enumerate(self._blocks):
             drop_connect_rate = self._global_params.drop_connect_rate
             if drop_connect_rate:
                 drop_connect_rate *= float(idx) / len(self._blocks)  # scale drop connect_rate
             x = block(x, drop_connect_rate=drop_connect_rate)
-            # ---------- SGE -----------
-            x = self.sges[idx](x)
-            # ---------- SGE -----------
+            if idx in self.sge_block_idxs:
+                # ---------- SGE -----------
+                x = self.sges[sge_idx](x)
+                sge_idx = sge_idx + 1
+                # ---------- SGE -----------
 
         # Head
         x = self._swish(self._bn1(self._conv_head(x)))
