@@ -18,7 +18,7 @@ from torch.nn import functional as F
 from torchvision import transforms
 
 from . import externals
-from architectures.gmodel import SAM, GHead
+from architectures.gmodel import SAM, MSPHead, SpatialGroupEnhance
 
 """
 Feature Extractor
@@ -174,31 +174,6 @@ class EfficientNetAutoAttB4(EfficientNetGenAutoAtt):
 
 
 """
-EfficientSA(Scale Attention)
-"""
-
-
-class EfficientNetSAB4(FeatureExtractor):
-    def __init__(self, model: str = 'efficientnet-b4', width: int = 0):
-        super(EfficientNetSAB4, self).__init__()
-        # efficientnet
-        self.efficientnet = EfficientNet.from_pretrained(model)
-        del self.efficientnet._fc
-
-        # head
-        self.ghead = GHead(self.efficientnet)
-
-        self.classifier = nn.Linear(self.efficientnet._conv_head.out_channels, 1)
-
-
-    def forward(self, x):     # [1, 3, 224, 224]
-        endpoints = self.efficientnet.extract_endpoints(x)  # 6 x [B, _, _, _]
-
-        x = self.ghead(endpoints)
-        return x    # [1, 1]
-
-
-"""
 Xception
 """
 
@@ -270,3 +245,85 @@ class EfficientNetAutoAttB4ST(SiameseTuning):
 class XceptionST(SiameseTuning):
     def __init__(self):
         super(XceptionST, self).__init__(feat_ext=Xception, num_feat=2048, lastonly=True)
+
+
+"""
+EfficientSA(Scale Attention)
+"""
+
+
+class EfficientNetSGE(EfficientNet):
+    def init(self):
+        # SGE
+        self.sges = nn.ModuleList([SpatialGroupEnhance() for i in range(len(self._blocks))])
+
+    def extract_endpoints(self, inputs):
+        """Use convolution layer to extract features
+        from reduction levels i in [1, 2, 3, 4, 5].
+
+        Args:
+            inputs (tensor): Input tensor.
+
+        Returns:
+            Dictionary of last intermediate features
+            with reduction levels i in [1, 2, 3, 4, 5].
+            Example:
+                # >>> import torch
+                # >>> from efficientnet.model import EfficientNet
+                # >>> inputs = torch.rand(1, 3, 224, 224)
+                # >>> model = EfficientNet.from_pretrained('efficientnet-b0')
+                # >>> endpoints = model.extract_endpoints(inputs)
+                # >>> print(endpoints['reduction_1'].shape)  # torch.Size([1, 16, 112, 112])
+                # >>> print(endpoints['reduction_2'].shape)  # torch.Size([1, 24, 56, 56])
+                # >>> print(endpoints['reduction_3'].shape)  # torch.Size([1, 40, 28, 28])
+                # >>> print(endpoints['reduction_4'].shape)  # torch.Size([1, 112, 14, 14])
+                # >>> print(endpoints['reduction_5'].shape)  # torch.Size([1, 320, 7, 7])
+                # >>> print(endpoints['reduction_6'].shape)  # torch.Size([1, 1280, 7, 7])
+        """
+        endpoints = dict()
+
+        # Stem
+        x = self._swish(self._bn0(self._conv_stem(inputs)))
+        prev_x = x
+
+        # Blocks
+        for idx, block in enumerate(self._blocks):
+            drop_connect_rate = self._global_params.drop_connect_rate
+            if drop_connect_rate:
+                drop_connect_rate *= float(idx) / len(self._blocks)  # scale drop connect_rate
+            x = block(x, drop_connect_rate=drop_connect_rate)
+            # ---------- SGE -----------
+            x = self.sges[idx](x)
+            # ---------- SGE -----------
+            if prev_x.size(2) > x.size(2):
+                endpoints['reduction_{}'.format(len(endpoints) + 1)] = prev_x
+            elif idx == len(self._blocks) - 1:
+                endpoints['reduction_{}'.format(len(endpoints) + 1)] = x
+            prev_x = x
+
+        # Head
+        x = self._swish(self._bn1(self._conv_head(x)))
+        endpoints['reduction_{}'.format(len(endpoints) + 1)] = x
+
+        return endpoints
+
+
+class SgeMspNet(FeatureExtractor):
+
+    def __init__(self, model: str = 'efficientnet-b4'):
+        super(SgeMspNet, self).__init__()
+        # efficientnet
+        self.efficientnet = EfficientNetSGE.from_pretrained(model)
+        self.efficientnet.init()
+        del self.efficientnet._fc
+
+        # head
+        self.ghead = MSPHead(self.efficientnet)
+
+    def forward(self, x):     # [1, 3, 224, 224]
+        endpoints = self.efficientnet.extract_endpoints(x)  # 6 x [B, _, _, _]
+
+        x = self.ghead(endpoints)
+        return x    # [1, 1]
+
+

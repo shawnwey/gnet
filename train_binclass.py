@@ -43,10 +43,10 @@ def main():
     # Args
     parser = argparse.ArgumentParser()
     # 命名规定：网络名称（用net拼接）-其他实验因素，下划线区分
-    parser.add_argument('--exp_id', type=str, default='EfficientNetSAB4-sa_interpolate_eca')
+    parser.add_argument('--exp_id', type=str, default='SgeMspNet-sge_msp')
     parser.add_argument('--env', type=int, default=0)
     parser.add_argument('--device', type=int, help='GPU device id', default=0)
-    parser.add_argument('--net', type=str, help='Net model class', default='EfficientNetSAB4')
+    parser.add_argument('--net', type=str, help='Net model class', default='SgeMspNet')
     parser.add_argument('--traindb', type=list, help='Training datasets', nargs='+', choices=split.available_datasets,
                         default=['ff-c40-720-140-140'])
     parser.add_argument('--valdb', type=list, help='Validation datasets', nargs='+', choices=split.available_datasets,
@@ -147,7 +147,7 @@ def main():
     # Load net
     net: nn.Module = net_class().to(device)
 
-    dummy = torch.randn((1, 3, face_size, face_size), device=device)
+    dummy = torch.randn((18, 3, face_size, face_size), device=device)
     dummy = dummy.to(device)
     net(dummy)
     # Loss and optimizers
