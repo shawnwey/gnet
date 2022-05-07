@@ -5,11 +5,11 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import seaborn as sns
+# import seaborn as sns
 import sklearn.metrics as M
 from scipy.special import expit
 from sklearn.metrics import log_loss
-from tqdm.notebook import tqdm
+from tqdm import tqdm
 
 pd.set_option('display.max_columns', None)
 pd.set_option('display.width', None)
@@ -49,12 +49,17 @@ def analyze_net_pklResults(exp_id: str):
         print(dataset)
         for model_comb in tqdm(comb_list):
             df = get_df(data_frame_df, dataset)
-            results_df[model_comb][dataset, 'loss'] = log_loss(df['label'], expit(np.mean(df[list(model_comb)],
-                                                                                          axis=1)))
-            results_df[model_comb][dataset, 'auc'] = M.roc_auc_score(df['label'], expit(np.mean(df[list(model_comb)],
-                                                                                                axis=1)))
-            results_df[model_comb][dataset, 'acc'] = M.accuracy_score(df['label'], expit(np.mean(df[list(model_comb)],
-                                                                                                axis=1)))
+            results_df[model_comb][dataset, 'loss'] = \
+                log_loss(df['label'], expit(np.mean(df[list(model_comb)], axis=1)))
+            results_df[model_comb][dataset, 'auc'] = \
+                M.roc_auc_score(df['label'], expit(np.mean(df[list(model_comb)], axis=1)))
+            y_pred = expit(np.mean(df[list(model_comb)], axis=1))
+
+            threshold = 0.1101
+            y_pred[y_pred >= threshold] = 1
+            y_pred[y_pred < threshold] = 0
+            results_df[model_comb][dataset, 'acc'] = \
+                M.accuracy_score(df['label'], y_pred)
     print(results_df.T)
 
 
