@@ -41,7 +41,7 @@ def analyze_net_pklResults(exp_id: str):
     net_list = [net_name]
     # 排列组合
     comb_list = list(combinations(net_list, 1))
-    iterables = [dataset_list, ['loss', 'auc']]
+    iterables = [dataset_list, ['loss', 'auc', 'acc']]
     index = pd.MultiIndex.from_product(iterables, names=['dataset', 'metric'])
     results_df = pd.DataFrame(index=index, columns=comb_list)
 
@@ -52,6 +52,8 @@ def analyze_net_pklResults(exp_id: str):
             results_df[model_comb][dataset, 'loss'] = log_loss(df['label'], expit(np.mean(df[list(model_comb)],
                                                                                           axis=1)))
             results_df[model_comb][dataset, 'auc'] = M.roc_auc_score(df['label'], expit(np.mean(df[list(model_comb)],
+                                                                                                axis=1)))
+            results_df[model_comb][dataset, 'acc'] = M.accuracy_score(df['label'], expit(np.mean(df[list(model_comb)],
                                                                                                 axis=1)))
     print(results_df.T)
 

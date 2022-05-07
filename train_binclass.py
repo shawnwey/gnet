@@ -43,10 +43,10 @@ def main():
     # Args
     parser = argparse.ArgumentParser()
     # 命名规定：网络名称（用net拼接）-其他实验因素，下划线区分
-    parser.add_argument('--exp_id', type=str, default='SgeNet')
+    parser.add_argument('--exp_id', type=str, default='MspNet')
     parser.add_argument('--env', type=int, default=0)
     parser.add_argument('--device', type=int, help='GPU device id', default=0)
-    parser.add_argument('--net', type=str, help='Net model class', default='SgeNet')
+    parser.add_argument('--net', type=str, help='Net model class', default='MspNet')
     parser.add_argument('--traindb', type=list, help='Training datasets', nargs='+', choices=split.available_datasets,
                         default=['ff-c40-720-140-140'])
     parser.add_argument('--valdb', type=list, help='Validation datasets', nargs='+', choices=split.available_datasets,

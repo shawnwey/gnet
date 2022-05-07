@@ -7,7 +7,6 @@ from torch.nn import functional as F
 from torchvision import transforms
 from functools import partial
 
-
 from isplutils.utils import _get_shape
 from isplutils.containers import (Parallel, SequentialMultiInputMultiOutput)
 from isplutils.layers import (Interpolate, Reverse, Sum)
@@ -47,17 +46,17 @@ class MSPHead(nn.Module):
 
 
 class SpatialAttention(nn.Module):
-    def __init__(self,kernel_size=7):
+    def __init__(self, kernel_size=7):
         super(SpatialAttention, self).__init__()
-        self.conv=nn.Conv2d(2,1,kernel_size=kernel_size,padding=kernel_size//2)
-        self.sigmoid=nn.Sigmoid()
+        self.conv = nn.Conv2d(2, 1, kernel_size=kernel_size, padding=kernel_size // 2)
+        self.sigmoid = nn.Sigmoid()
 
-    def forward(self, x) :
-        max_result,_=torch.max(x,dim=1,keepdim=True)
-        avg_result=torch.mean(x,dim=1,keepdim=True)
-        result=torch.cat([max_result,avg_result],1)
-        output=self.conv(result)
-        output=self.sigmoid(output)
+    def forward(self, x):
+        max_result, _ = torch.max(x, dim=1, keepdim=True)
+        avg_result = torch.mean(x, dim=1, keepdim=True)
+        result = torch.cat([max_result, avg_result], 1)
+        output = self.conv(result)
+        output = self.sigmoid(output)
         return output
 
 
@@ -289,13 +288,12 @@ class SpatialGroupEnhance(nn.Module):
 
     def __init__(self, groups=8):
         super().__init__()
-        self.groups=groups
+        self.groups = groups
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.weight=nn.Parameter(torch.zeros(1,groups,1,1))
-        self.bias=nn.Parameter(torch.zeros(1,groups,1,1))
-        self.sig=nn.Sigmoid()
+        self.weight = nn.Parameter(torch.zeros(1, groups, 1, 1))
+        self.bias = nn.Parameter(torch.zeros(1, groups, 1, 1))
+        self.sig = nn.Sigmoid()
         self.init_weights()
-
 
     def init_weights(self):
         for m in self.modules():
@@ -312,20 +310,23 @@ class SpatialGroupEnhance(nn.Module):
                     init.constant_(m.bias, 0)
 
     def forward(self, x):
-        b, c, h,w=x.shape
-        x=x.view(b*self.groups,-1,h,w) #bs*g,dim//g,h,w
-        xn=x*self.avg_pool(x) #bs*g,dim//g,h,w
-        xn=xn.sum(dim=1,keepdim=True) #bs*g,1,h,w
-        t=xn.view(b*self.groups,-1) #bs*g,h*w
+        b, c, h, w = x.shape
+        x = x.view(b * self.groups, -1, h, w)  # bs*g,dim//g,h,w
+        xn = x * self.avg_pool(x)  # bs*g,dim//g,h,w
 
-        t=t-t.mean(dim=1,keepdim=True) #bs*g,h*w
-        std=t.std(dim=1,keepdim=True)+1e-5
-        t=t/std #bs*g,h*w
-        t=t.view(b,self.groups,h,w) #bs,g,h*w
+        # normalization
+        xn = xn.sum(dim=1, keepdim=True)  # bs*g,1,h,w
+        spatial_att_g = xn.view(b * self.groups, -1)  # bs*g,h*w
+        spatial_att_g = spatial_att_g - spatial_att_g.mean(dim=1, keepdim=True)  # bs*g,h*w
+        std = spatial_att_g.std(dim=1, keepdim=True) + 1e-5
+        spatial_att_g = spatial_att_g / std  # bs*g,h*w
+        spatial_att_g = spatial_att_g.view(b, self.groups, h, w)  # bs,g,h*w
 
-        t=t*self.weight+self.bias #bs,g,h*w
-        t=t.view(b*self.groups,1,h,w) #bs*g,1,h*w
-        x=x*self.sig(t)
-        x=x.view(b,c,h,w)
+        # 组间注意力：weight、bias
+        spatial_att_g = spatial_att_g * self.weight + self.bias  # bs,g,h*w
+        # 分组空间注意力
+        spatial_att_g = spatial_att_g.view(b * self.groups, 1, h, w)  # bs*g,1,h*w
+        x = x * self.sig(spatial_att_g)
+        x = x.view(b, c, h, w)
 
         return x

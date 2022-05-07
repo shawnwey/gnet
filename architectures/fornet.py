@@ -55,14 +55,15 @@ class EfficientNetGen(FeatureExtractor):
         self.classifier = nn.Linear(self.efficientnet._conv_head.out_channels, 1)
         del self.efficientnet._fc
 
-    def features(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x, debug=False):
+        if debug:
+            x = self.efficientnet.extract_endpoints(x)
+            return tuple(x.values())
+
         x = self.efficientnet.extract_features(x)
         x = self.efficientnet._avg_pooling(x)
         x = x.flatten(start_dim=1)
-        return x
 
-    def forward(self, x):
-        x = self.features(x)
         x = self.efficientnet._dropout(x)
         x = self.classifier(x)
         return x
@@ -118,9 +119,10 @@ class EfficientNetAutoAtt(EfficientNet):
             x = block(x, drop_connect_rate=drop_connect_rate)
             if idx == self.att_block_idx:
                 att = torch.sigmoid(self.attconv(x))
+                x = x * att
                 break
 
-        return att
+        return x
 
     def extract_features(self, x: torch.Tensor) -> torch.Tensor:
         # Stem
@@ -158,11 +160,13 @@ class EfficientNetGenAutoAtt(FeatureExtractor):
         x = x.flatten(start_dim=1)
         return x  # [1, 1792]
 
-    def forward(self, x):
-        x = self.features(x)
+    def forward(self, x, debug=False):
+        if debug:
+            return self.efficientnet.get_attention(x)
+        x = self.features(x)    # [1, 1792]
         x = self.efficientnet._dropout(x)
         x = self.classifier(x)
-        return x
+        return x    # [B, 1]
 
     def get_attention(self, x: torch.Tensor) -> torch.Tensor:
         return self.efficientnet.get_attention(x)
@@ -255,7 +259,7 @@ EfficientSA(Scale Attention)
 class EfficientNetSGE(EfficientNet):
     def init(self):
         # SGE
-        self.sge_block_idxs = [9]
+        self.sge_block_idxs = [1, 5, 9, 21, 31]
         self.sges = nn.ModuleList([SpatialGroupEnhance() for i in range(len(self.sge_block_idxs))])
 
     def extract_endpoints(self, inputs):
@@ -343,6 +347,24 @@ class EfficientNetSGE(EfficientNet):
         return x
 
 
+class MspNet(FeatureExtractor):
+
+    def __init__(self, model: str = 'efficientnet-b4'):
+        super(MspNet, self).__init__()
+        # efficientnet
+        self.efficientnet = EfficientNet.from_pretrained(model)
+        del self.efficientnet._fc
+
+        # head
+        self.mspHead = MSPHead(self.efficientnet)
+
+    def forward(self, x):     # [1, 3, 224, 224]
+        endpoints = self.efficientnet.extract_endpoints(x)  # 6 x [B, _, _, _]
+
+        x = self.mspHead(endpoints)
+        return x    # [1, 1]
+
+
 class SgeMspNet(FeatureExtractor):
 
     def __init__(self, model: str = 'efficientnet-b4'):
@@ -374,7 +396,10 @@ class SgeNet(FeatureExtractor):
         # head
         self.classifier = nn.Linear(self.efficientnet._conv_head.out_channels, 1)
 
-    def forward(self, x):     # [1, 3, 224, 224]
+    def forward(self, x, debug=False):     # [1, 3, 224, 224]
+        if debug:
+            x = self.efficientnet.extract_endpoints(x)
+            return tuple(x.values())
         x = self.efficientnet.extract_features(x)  # 6 x [B, _, _, _]
 
         x = self.efficientnet._avg_pooling(x)  # [B, 1792, 1, 1]
